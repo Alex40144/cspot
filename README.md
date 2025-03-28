@@ -1,6 +1,7 @@
 ![C/C++ CI](https://github.com/feelfreelinux/cspot/workflows/C/C++%20CI/badge.svg)
 ![ESP IDF](https://github.com/feelfreelinux/cspot/workflows/ESP%20IDF/badge.svg)
 [![Certification](https://badgen.net/badge/Stary%20Filipa/certified?color=purple)](https://github.com/feelfreelinux/cspot)
+[![Certification](https://badgen.net/badge/Memory%20leaks/yes)](https://github.com/feelfreelinux/cspot)
 [![Certification](https://badgen.net/badge/Sasin/stole%2070%20mln%20PLN)](https://github.com/feelfreelinux/cspot)
 
 <p align="center">
@@ -30,11 +31,9 @@ Summary:
 - protoc
 - on Linux you will additionally need:
     - `libasound` and `libavahi-compat-libdnssd`
-- mbedtls
+
 
 This project utilizes submodules, please make sure you are cloning with the `--recursive` flag or use `git submodule update --init --recursive`.
-
-MBedTLS is now the sole option, so you can get it from [there](https://github.com/Mbed-TLS/mbedtls) and rebuild it or have it installed system-wide using your favorite package manager. See below how to use a local version.
 
 This library uses nanopb to generate c files from protobuf definitions. Nanopb itself is included via submodules, but it requires a few external python libraries to run the generators.
 
@@ -53,51 +52,7 @@ $ sudo apt-get install libavahi-compat-libdnssd-dev libasound2-dev
 ```
 
 
-### Building for macOS
-### Building for macOS/Linux & Windows
-
-The cli target is used mainly for testing and development purposes, as of now it has the same features as the esp32 target.
-
-As MbedTLS is now use instead of OpenSSL, you need to install it or your system or have a local build. If you have a system-wide install of MbedTLS, ignore what's below
-
-To use a local build, you have to specify the BELL_EXTERNAL_MBEDTLS and potentially MBEDTLS_RELEASE. The first one points to the "./cmake" subdir of the MbedTLS's build directory, the second optionally defines the name of the MbedTLS build (it's by default set to 'RELEASE' for Windows and 'NOCONFIG' for others). 
-
-See running the CLI for information on how to run cspot on a desktop computer.
-
-#### macOS/Linux
-
-```shell
-# navigate to the targets/cli directory
-$ cd targets/cli
-
-# create a build directory and navigate to it
-$ mkdir -p build && cd build
-
-# use cmake to generate build files, and select an audio sink
-$ cmake .. -DUSE_PORTAUDIO=ON [-DBELL_EXTERNAL_MBEDTLS=<mbedtls_build_dir>/cmake>] [-DMBEDTLS_RELEASE=<release_name>]
-
-# compile
-$ make 
-```
-
-#### Windows
-
-```shell
-# navigate to the targets/cli directory
-$ cd targets/cli
-
-# create a build directory and navigate to it
-$ mkdir -p build && cd build
-
-# use cmake to generate build files, and select an audio sink
-$ cmake .. -A Win32|x64 -DUSE_PORTAUDIO=ON [-DBELL_EXTERNAL_MBEDTLS=<mbedtls_build_dir>/cmake>] [-DMBEDTLS_RELEASE=<release_name>]
-```
-
-Go to `build` and use `cspotcli.sln` under VisualStudio or use `msbuild` from command line.
-
-Note that for now, only the Win32 build has been tested, not the x64 version. Under some VS releases, the protobuf might not be rebuilt automatically, just go to the project "generate_proto_sources" and do a C^F7 on each `*.pb.rule`
-
-### Building for Linux
+### Building for macOS/Linux
 
 The cli target is used mainly for testing and development purposes, as of now it has the same features as the esp32 target.
 
@@ -109,67 +64,12 @@ $ cd targets/cli
 $ mkdir -p build && cd build
 
 # use cmake to generate build files, and select an audio sink
-$ cmake .. -DUSE_ALSA=ON
+$ cmake .. -DUSE_PORTAUDIO=ON
 
 # compile
 $ make 
 ```
 See running the CLI for information on how to run cspot on a desktop computer.
-
-### Building for ESP32
-
-The ESP32 target is built using the [esp-idf](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html) toolchain
-
-```shell
-# Follow the instructions for setting up esp-idf for your operating system, up to `. ./export.sh` or equivalent
-# esp-idf has a Python virtualenv, install nanopb's dependencies in it
-$ pip3 install protobuf grpcio-tools
-# update submodules after each code pull to avoid build errors
-$ git submodule update --init --recursive
-# navigate to the targets/esp32 directory
-$ cd targets/esp32
-# run once after pulling the repo
-$ idf.py set-target esp32
-```
-
-Configure CSPOT according to your hardware
-
-```shell
-# run visual config editor, when done press Q to save and exit
-$ idf.py menuconfig
-```
-
-Navigate to `Example Connection Configuration` and provide wifi connection details
-
-![idf-menuconfig](/targets/esp32/doc/img/idf-menuconfig-2.png)
-
-Navigate to `CSPOT Configuration`, you may configure device name, output device and audio quality.
-
-![idf-menuconfig](/targets/esp32/doc/img/idf-menuconfig-1.png)
-
-#### Status LED
-
-By default LED indication is disabled, but you can use either standard GPIO or addressable LED to indicate cspot current status. It will use different blinking patterns (and colors in case of addressable LEDs) to indicate Wifi connectivity and presense of connected Spotify client.
-
-#### Building and flashing
-
-Build and upload the firmware
-
-```shell
-# compile
-$ idf.py build
-
-# upload
-$ idf.py flash
-```
-The ESP32 will restart and begin running cspot. You can monitor it using a serial console.
-
-Optionally run as single command
-
-```shell
-# compile, flash and attach monitor
-$ idf.py build flash monitor
-```
 
 ## Running
 
@@ -181,7 +81,6 @@ After building the app, the only thing you need to do is to run it through CLI.
 $ ./cspotcli
 
 ```
-If you run it with no parameter, it will use ZeroConf to advertise itself. This means that until at least one **local** Spotify Connect application has discovered and connected it, it will not be registered to Spotify servers. As a consequence, Spotify's WebAPI will not be able to see it. If you want the player to be registered at start-up, you need to either use username/password all the time or at least once to create a credentials file and then re-use that file. Run it with -u/-p/-c once and then run it with -c only. See command's line help.
 
 Now open a real Spotify app and you should see a cspot device on your local network. Use it to play audio.
 
@@ -195,14 +94,14 @@ It exposes an interface for starting the communication with Spotify servers and 
 
 You can view the [`cspot-cli`]([targets/cli/main.cpp) program for a reference on how to include cspot in your program. It provides a few audio sinks for various platforms and uses:
 
-- [`ALSAAudioSink`](cspot/bell/src/sinks/unix/ALSAAudioSink.cpp) - Linux, requires `libasound`
-- [`PortAudioSink`](cspot/bell/src/sinks/unix/PortAudioSink.cpp) - MacOS (PortAudio also supports more platforms, but we currently use it only on MacOS), requires the PortAudio library
-- [`NamedPipeAudioSink`](cspot/bell/src/sinks/unix/NamedPipeAudioSink.cpp) - all platforms, writes to a file/FIFO pipe called `outputFifo` which can later be played back by FFmpeg. Used mainly for testing and development.
+- [`ALSAAudioSink`](targets/cli/ALSAAudioSink.cpp) - Linux, requires `libasound`
+- [`PortAudioSink`](targets/cli/PortAudioSink.cpp) - MacOS (PortAudio also supports more platforms, but we currently use it only on MacOS), requires the PortAudio library
+- [`NamedPipeAudioSink`](targets/cli/NamedPipeAudioSink.cpp) - all platforms, writes to a file/FIFO pipe called `outputFifo` which can later be played back by FFmpeg. Used mainly for testing and development.
 
 Additionaly the following audio sinks are implemented for the esp32 target:
-- [`ES9018AudioSink`](cspot/bell/src/sinks/esp/ES9018AudioSink.cpp) - provides playback via a ES9018 DAC connected to the ESP32
-- [`AC101AudioSink`](cspot/bell/src/sinks/esp/AC101AudioSink.cpp) - provides playback via the AC101 DAC used in cheap ESP32 A1S audiokit boards, commonly found on aliexpress.
-- [`PCM5102AudioSink`](cspot/bell/src/sinks/esp/PCM5102AudioSink.cpp) - provides playback via a PCM5102 DAC connected to the ESP32, commonly found in the shape of small purple modules at various online retailers. Wiring can be configured in the sink and defaults to:
+- [`ES9018AudioSink`](targets/esp32/main/sinks/ES9018AudioSink.cpp) - provides playback via a ES9018 DAC connected to the ESP32
+- [`AC101AudioSink`](targets/esp32/main/sinks/AC101AudioSink.cpp) - provides playback via the AC101 DAC used in cheap ESP32 A1S audiokit boards, commonly found on aliexpress.
+- [`PCM5102AudioSink`](targets/esp32/main/sinks/PCM5102AudioSink.cpp) - provides playback via a PCM5102 DAC connected to the ESP32, commonly found in the shape of small purple modules at various online retailers. Wiring can be configured in the sink and defaults to:
   - SCK to Ground
   - BCK to PGIO27
   - DIN to GPIO25

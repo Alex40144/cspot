@@ -1,39 +1,68 @@
-cmake_minimum_required(VERSION 2.8.12)
-
 project(cspot)
 
-# Configurable options
-set(CSPOT_EXTERNAL_BELL "" CACHE STRING "External bell library target name, optional")
+cmake_minimum_required(VERSION 2.8.9)
+set (CMAKE_CXX_STANDARD 17)
 
-# CMake options
-set(CMAKE_CXX_STANDARD 20)
-
-if(MSVC)
-	add_compile_definitions(NOMINMAX _WINSOCK_DEPRECATED_NO_WARNINGS _CRT_SECURE_NO_WARNINGS)
-	add_definitions(/wd4068 /wd4244 /wd4018 /wd4101 /wd4102 /wd4142 /wd4996)
-endif()
-
-# Main library sources
 file(GLOB SOURCES "src/*.cpp" "src/*.c")
 
-# Use externally specified bell library or the submodule
-if(CSPOT_EXTERNAL_BELL)
-    list(APPEND EXTRA_LIBS ${CSPOT_EXTERNAL_BELL})
-else()
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/bell)
-    list(APPEND EXTRA_LIBS bell)
+# Add platform specific sources
+
+if(${ESP_PLATFORM})
+    file(GLOB ESP_PLATFORM_SOURCES "src/platform/esp/*.cpp" "src/platform/esp/*.c")
+    set(SOURCES ${SOURCES} ${ESP_PLATFORM_SOURCES} )
 endif()
 
-# Build protobuf code
-set(NANOPB_OPTIONS "-I${CMAKE_CURRENT_SOURCE_DIR}")
-file(GLOB PROTOS protobuf/*.proto)
-nanopb_generate_cpp(PROTO_SRCS PROTO_HDRS RELPATH ${CMAKE_CURRENT_SOURCE_DIR} ${PROTOS})
-add_custom_target(generate_proto_sources DEPENDS ${PROTO_SRCS} ${PROTO_HDRS})
-set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES GENERATED TRUE)
+if(UNIX)
+    file(GLOB UNIX_PLATFORM_SOURCES "src/platform/unix/*.cpp" "src/platform/unix/*.c")
+    set(SOURCES ${SOURCES} ${UNIX_PLATFORM_SOURCES} )
+endif()
 
-add_library(cspot STATIC ${SOURCES} ${PROTO_SRCS})
-# PUBLIC to propagate includes from bell to cspot dependents
-target_compile_definitions(bell PUBLIC PB_ENABLE_MALLOC)
-target_compile_definitions(bell PUBLIC PB_FIELD_32BIT)
-target_link_libraries(cspot PUBLIC ${EXTRA_LIBS})
-target_include_directories(cspot PUBLIC "include" ${CMAKE_CURRENT_BINARY_DIR} ${NANOPB_INCLUDE_DIRS} ${EXTRA_INCLUDES})
+if(APPLE)
+    file(GLOB APPLE_PLATFORM_SOURCES "src/platform/apple/*.cpp" "src/platform/apple/*.c")
+    set(SOURCES ${SOURCES} ${APPLE_PLATFORM_SOURCES} )
+endif()
+
+if(UNIX AND NOT APPLE)
+    file(GLOB LINUX_PLATFORM_SOURCES "src/platform/linux/*.cpp" "src/platform/linux/*.c")
+    set(SOURCES ${SOURCES} ${LINUX_PLATFORM_SOURCES} )
+endif()
+
+
+
+if(${ESP_PLATFORM})
+    list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/CryptoOpenSSL.cpp) # use MBedTLS 
+    idf_build_set_property(COMPILE_DEFINITIONS "-DCSPOT_USE_MBEDTLS" APPEND)
+    set(EXTRA_REQ_LIBS idf::mbedtls idf::pthread idf::mdns)
+    add_definitions(-Wunused-const-variable -Wchar-subscripts -Wunused-label -Wmaybe-uninitialized -Wmisleading-indentation)
+else()
+    list(REMOVE_ITEM SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/CryptoMbedTLS.cpp) # use OpenSSL
+    find_package(OpenSSL REQUIRED)
+    if(OPENSSL_FOUND)
+        set(OPENSSL_USE_STATIC_LIBS TRUE)
+    endif()
+    set(EXTRA_REQ_LIBS OpenSSL::Crypto Threads::Threads)
+    set(THREADS_PREFER_PTHREAD_FLAG ON)
+    find_package(Threads REQUIRED)
+endif()
+
+if(UNIX AND NOT APPLE)
+    set(EXTRA_REQ_LIBS ${EXTRA_REQ_LIBS} dns_sd) # add apple bonjur compatibility library for linux
+    # TODO: migrate from this to native linux mDNS
+endif()
+
+include_directories("cJSON")
+include_directories("include")
+include_directories("tremor")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+include_directories("protos")
+
+message(${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_protos.sh)
+execute_process(COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_protos.sh" WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+
+set(SOURCES ${SOURCES} "tremor/mdct.c" "tremor/dsp.c" "tremor/info.c" "tremor/misc.c" "tremor/floor1.c" "tremor/floor0.c" "tremor/vorbisfile.c" "tremor/res012.c" "tremor/mapping0.c" "tremor/codebook.c" "tremor/framing.c" "tremor/bitwise.c" "tremor/floor_lookup.c" "cJSON/cJSON.c")
+set(SOURCES ${SOURCES} "protos/AnyRefImpl.cpp" "protos/ReflectTypeInfo.cpp")
+
+add_library(cspot STATIC ${SOURCES})
+target_link_libraries(cspot PRIVATE ${EXTRA_REQ_LIBS})
+
+target_include_directories(cspot PUBLIC "include" "protos" "tremor" "cJSON" ${EXTRA_REQ_LIBS} ${CMAKE_CURRENT_BINARY_DIR})
