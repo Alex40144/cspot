@@ -74,6 +74,9 @@ static EventGroupHandle_t s_wifi_event_group;
 #ifdef CONFIG_CSPOT_SINK_TAS5711
 #include <TAS5711AudioSink.h>
 #endif
+#ifdef ES8311
+#include <ES8311AudioSink.h>
+#endif
 #endif
 
 extern "C" {
